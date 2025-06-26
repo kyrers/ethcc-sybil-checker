@@ -1,39 +1,41 @@
 import { useState, useEffect, useRef } from "react";
 import { Html5Qrcode } from "html5-qrcode";
+import { createClient } from "@supabase/supabase-js";
 import "./App.css";
+
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
 
 function App() {
   const [scanning, setScanning] = useState(false);
-  const [db, setDb] = useState([
-    "1234567890",
-    "0987654321",
-    "1234567890",
-    "0987654321",
-    "1234567890",
-    "0987654321",
-    "1234567890",
-    "0987654321",
-    "1234567890",
-    "0987654321",
-    "1234567890",
-    "0987654321",
-    "1234567890",
-    "0987654321",
-    "1234567890",
-    "0987654321",
-    "1234567890",
-    "0987654321",
-    "1234567890",
-    "0987654321",
-    "1234567890",
-    "0987654321",
-    "1234567890",
-  ]); // mock DB: array of scanned codes
-  const [scanResult, setScanResult] = useState(null);
-  const [status, setStatus] = useState(null); // 'found' | 'notfound' | null
+  const [db, setDb] = useState([]);
+  const [status, setStatus] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   const html5QrCodeRef = useRef(null);
   const readerRef = useRef(null);
+
+  useEffect(() => {
+    loadCodes();
+  }, []);
+
+  const loadCodes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("scanned_codes")
+        .select("code");
+
+      if (error) throw error;
+
+      setDb(data.map((row) => row.code));
+    } catch (error) {
+      console.error("Error loading codes:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     return () => {
@@ -60,25 +62,36 @@ function App() {
       html5QrCodeRef.current.stop().catch(() => {});
       html5QrCodeRef.current = null;
     }
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanning]);
 
-  const handleScan = (result) => {
+  const handleScan = async (result) => {
     if (result?.text && scanning) {
       setScanning(false);
-      setScanResult(result.text);
+
       if (db.includes(result.text)) {
         setStatus("found");
       } else {
-        setDb((prev) => [...prev, result.text]);
-        setStatus("notfound");
+        try {
+          const { error } = await supabase
+            .from("scanned_codes")
+            .insert([{ code: result.text }]);
+
+          if (error) throw error;
+
+          setDb((prev) => [...prev, result.text]);
+          setStatus("notfound");
+        } catch (error) {
+          console.error("Error inserting code:", error);
+          setStatus("error");
+        }
       }
     }
   };
 
   const handleStart = () => {
     setScanning(true);
-    setScanResult(null);
     setStatus(null);
   };
 
@@ -89,6 +102,14 @@ function App() {
       handleStart();
     }
   };
+
+  if (loading) {
+    return (
+      <div className="container-mobile">
+        <h2>Loading...</h2>
+      </div>
+    );
+  }
 
   return (
     <div className="container-mobile">
@@ -111,6 +132,13 @@ function App() {
               style={{ color: "#22c55e", fontSize: "x-large" }}
             >
               ✅ Not scanned yet
+            </div>
+          ) : status === "error" ? (
+            <div
+              className="scan-placeholder"
+              style={{ color: "#f59e0b", fontSize: "x-large" }}
+            >
+              ⚠️ Database error
             </div>
           ) : (
             <div className="scan-placeholder">Scanner stopped.</div>
