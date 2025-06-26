@@ -3,5 +3,3 @@
 # ethcc-sybil-checker
 
 Sybil checker for the Schelling game.
-
-[Live Demo](https://schelling-sybil-checker.netlify.app)
